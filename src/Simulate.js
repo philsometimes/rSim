@@ -6,6 +6,19 @@ import * as math from "mathjs";
 //   const
 // }
 
+const magnitude = (vecAsArray) => {
+  const mag = math.sqrt(
+    math.add(math.square(vecAsArray[0]), math.square(vecAsArray[1]))
+  );
+  return mag;
+};
+
+const unitVec = (vecAsArray) => {
+  const mag = magnitude(vecAsArray);
+  const unitVec = math.divide(vecAsArray, mag);
+  return unitVec;
+};
+
 const Simulation = () => {
   const rX = math.unit("0.1 m");
   const rY = math.unit("0.1 m");
@@ -29,9 +42,6 @@ const Simulation = () => {
   const grfY = math.divide(weight, -4);
   const grfX = math.multiply(grfY, math.tan(grfTheta));
   const grf = [grfX, grfY];
-  const momentArm = 2;
-  const moment = 34;
-  // const moment = math.cross(momentArm, grf);
 
   // conversions
   const rXpx = rX.toNumber("mm");
@@ -55,6 +65,25 @@ const Simulation = () => {
     y: elbow.y + limbLpx,
     ghostX: elbow.ghostX
   };
+
+  // get moment arm
+  const unitGRF = unitVec(grf);
+  const wristPos = [wrist.x, wrist.y];
+  const shoulderPos = [shoulder.x, shoulder.y];
+  const aMinusP = math.subtract(wristPos, shoulderPos);
+  const aMinusPDotN = math.dot(aMinusP, unitGRF);
+  const aMinusPDotNTimesN = math.multiply(aMinusPDotN, unitGRF);
+  const momentArm = math.subtract(aMinusP, aMinusPDotNTimesN);
+  const moment = math.unit(
+    math.norm(
+      math.cross(
+        [momentArm[0], momentArm[1], 0],
+        [grf[0].value, grf[1].value, 0]
+      )
+    ),
+    "N*m"
+  );
+  const momentArmM = math.unit(math.norm(momentArm), "mm");
 
   return (
     <div sx={{ height: "100vh", width: "100vw" }}>
@@ -82,7 +111,7 @@ const Simulation = () => {
             markerHeight="5"
             orient="auto"
           >
-            <path d="M 0 0 L 10 5 L 0 10 z" fill="lightgreen" />
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="green" />
           </marker>
         </defs>
         <Torso zero={zero} rXpx={rXpx} rYpx={rYpx} />
@@ -93,7 +122,14 @@ const Simulation = () => {
           limbL={limbL}
         />
         <GhostLimb shoulder={shoulder} elbow={elbow} wrist={wrist} />
-        <Forces shoulder={shoulder} wrist={wrist} grf={grf} moment={moment} />
+        <Forces
+          shoulder={shoulder}
+          elbow={elbow}
+          wrist={wrist}
+          grf={grf}
+          moment={moment}
+          momentArm={momentArmM}
+        />
         <Labels
           zero={zero}
           shoulder={shoulder}
@@ -103,20 +139,38 @@ const Simulation = () => {
           rY={rY}
           mass={mass}
           limbL={limbL}
+          adductionTheta={adductionTheta}
         />
       </svg>
     </div>
   );
 };
 
-const Forces = ({ shoulder, wrist, grf, moment }) => {
-  const grfMag = math.sqrt(math.add(math.square(grf[0]), math.square(grf[1])));
+const Forces = ({ shoulder, elbow, wrist, grf, moment, momentArm }) => {
+  const grfMag = magnitude(grf);
   const x1 = wrist.x;
   const y1 = wrist.y;
   const x2 = wrist.x + grf[0].toNumeric("dN");
   const y2 = wrist.y + grf[1].toNumeric("dN");
   return (
     <>
+      <line
+        x1={`${shoulder.x}`}
+        y1={`${shoulder.y}`}
+        x2={`${elbow.x}`}
+        y2={`${shoulder.y}`}
+        stroke="red"
+        strokeWidth="2"
+        strokeDasharray="3,2"
+      />
+      <text
+        x={`${(shoulder.x + wrist.x) / 2}`}
+        y={shoulder.y * 0.98}
+        fill="red"
+        textAnchor="middle"
+      >
+        {momentArm.format({ notation: "fixed", precision: 2 })}
+      </text>
       <line
         x1={x1}
         y1={y1}
@@ -126,26 +180,40 @@ const Forces = ({ shoulder, wrist, grf, moment }) => {
         stroke="orange"
         strokeWidth="3"
       />
-      <text x={`${wrist.x * 1.02}`} y={y2} fill="orange">
+      <text x={`${wrist.x * 1.02}`} y={wrist.y} fill="orange">
         {grfMag.format({ notation: "fixed", precision: 2 })}
       </text>
       <path
         d={`M ${shoulder.x + 20} ${shoulder.y} a 20 20 0 0 1 -40 0
            a 20 20 0 0 1 20 -20`}
         markerEnd="url(#arrowHeadGreen)"
-        stroke="lightgreen"
+        stroke="green"
         strokeWidth="3"
         fill="none"
       />
-      <text x={`${shoulder.x + 25}`} y={`${shoulder.y + 25}`} fill="lightgreen">
-        {moment.toFixed(2)} Nm
+      <text
+        x={`${shoulder.x - 25}`}
+        y={`${shoulder.y + 25}`}
+        fill="green"
+        textAnchor="end"
+      >
+        {moment.format({ notation: "fixed", precision: 2 })}
       </text>
     </>
   );
 };
 
-const Labels = ({ zero, shoulder, elbow, wrist, rX, rY, mass, limbL }) => {
-  console.log(mass);
+const Labels = ({
+  zero,
+  shoulder,
+  elbow,
+  wrist,
+  rX,
+  rY,
+  mass,
+  limbL,
+  adductionTheta
+}) => {
   return (
     <>
       <text
@@ -168,13 +236,6 @@ const Labels = ({ zero, shoulder, elbow, wrist, rX, rY, mass, limbL }) => {
         textAnchor="start"
       >
         {rY.value} m
-      </text>
-      <text
-        x={`${shoulder.x + limbL.toNumeric("mm") / 2}`}
-        y={`${shoulder.y * 0.98}`}
-        textAnchor="middle"
-      >
-        {limbL.value} m
       </text>
       <text
         x={`${elbow.x * 1.02}`}
