@@ -24,6 +24,7 @@ const Simulation = () => {
   const rY = math.unit("0.1 m");
   const limbL = math.unit("0.1 m");
   const shoulderOffsetTheta = math.unit(45, "deg");
+  const retractionTheta = math.unit(0, "deg"); //in degrees, from straight out
   const adductionTheta = math.unit(0, "deg"); //in degrees, from horizontal
   const grfTheta = math.unit(0, "deg"); //deg
   const zoom = 1000;
@@ -56,9 +57,13 @@ const Simulation = () => {
     ghostX: zero.x - rXpx * math.cos(shoulderOffsetTheta)
   };
   const elbow = {
-    x: shoulder.x + limbLpx * math.cos(adductionTheta),
+    x:
+      shoulder.x +
+      limbLpx * math.cos(adductionTheta) * math.cos(retractionTheta),
     y: shoulder.y + limbLpx * math.sin(adductionTheta),
-    ghostX: shoulder.ghostX - limbLpx * math.cos(adductionTheta)
+    ghostX:
+      shoulder.ghostX -
+      limbLpx * math.cos(adductionTheta) * math.cos(retractionTheta)
   };
   const wrist = {
     x: elbow.x,
